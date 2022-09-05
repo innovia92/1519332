@@ -1,0 +1,1595 @@
+---
+title: "Implementation_1519332"
+author: "Loredana Vadana"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: default
+  pdf_document: default
+course: MSc Data Science and Analytics
+---
+
+
+
+#Libraries
+```{r}
+library(ggbiplot) #For plotting ggbiplot in PCA.
+library(ggplot2) #For plotting ggplot graphs.
+library(validate) #For check_that function.
+library(gridExtra)
+library(car) #For VIF function.
+library(dplyr) #For select function.
+library(moments) #For skewness function.
+library(htmlwidgets) #For library below.
+library(FactoMineR) #For cluster function.
+library(dendextend) #For color_branches function.
+library(DescTools) #For PseudoR^2 function.
+library(class) #For k-NN function.
+library(randomForest) #For RF model.
+library(caret) #For varImp function.
+library(ROCR) #For ROC Curve
+```
+
+# 1. Data Quality Check
+
+```{r}
+# Loading data frame.
+lol_ranked <- read.csv("high_diamond_ranked_10min.csv")
+```
+
+```{r}
+# Getting the data frame head (first six lines) and tail (last six lines) parts, to have a feel of the overall data.
+head(lol_ranked )
+tail(lol_ranked )
+```
+
+```{r}
+# Getting the data frame size. There are 40 Variables and 9879 Observations.
+nrow(lol_ranked )
+ncol(lol_ranked )
+dim(lol_ranked )
+```
+
+```{r}
+# Getting the column names.
+names(lol_ranked)
+```
+
+```{r}
+# Displaying the internal structure of data frame object. There are 7 numeric variables and 33 integer variables. In the data cleaning process, The integers will be converted to numerical data.
+str(lol_ranked)
+```
+
+```{r}
+#The target variable is a placeholder for "Yes" and "No" options, therefore it will be checked if it is a factor and if not, it will be converted into one. Inspecting the data set, it is noted that the same applies for the FirstKill variables of each team.
+levels(lol_ranked$blueWins)
+levels(lol_ranked$blueFirstBlood)
+levels(lol_ranked$redFirstBlood)
+```
+
+```{r}
+# Checking the summary statistics of the original subset. The gameID has irrelevant values, it is only displaying the position of the occurrences therefore it will be removed in the data cleaning process.
+summary(lol_ranked)
+```
+
+```{r}
+# Additional summary statistics for target variable
+range(lol_ranked$blueWins)     # range
+var(lol_ranked$blueWins)       # variance
+sd(lol_ranked$blueWins)        # standard deviation
+```
+
+```{r}
+# Displaying the number of occurrences of every unique value, through a frequency table.
+table(lol_ranked$blueWins)
+```
+
+```{r}
+# Plotting a frequency plot of the blueWins variable, for better visualisation, however, in this instance it seems that the table was a better solution since the results are so close to each other.
+ggplot(lol_ranked, aes(blueWins)) + geom_bar() + ggtitle("Frequency of Blue Team Winning Results") +theme_classic()
+```
+
+```{r}
+# Plotting the winning results against total experience.
+barplot(table(lol_ranked$blueWins, lol_ranked$blueTotalExperience),xlab="Blue Team Total Experience",ylab="Blue Team Results")
+```
+
+```{r}
+# Checking for missing data and fails and none were identified.
+lol_missing_data <- check_that(lol_ranked)
+lol_missing_data
+```
+
+```{r}
+# Checking for NA separately. None were identified.
+lol_NA_count <- apply(is.na(lol_ranked), 2, sum)
+lol_NA_count
+```
+
+
+
+```{r}
+# Checking for duplicates, storing all values separately.
+lol_ranked_duplicated <- duplicated(lol_ranked)
+lol_ranked_duplicated
+
+# Alternative to the above, storing it as the sum of all values. No duplicates identified.
+lol_ranked_duplicated <- sum(duplicated(subset(lol_ranked)))
+lol_ranked_duplicated
+```
+
+```{r}
+# Generating boxplots to check if there are any outliers. The variables that will be turned into factors as well as the gameID one has been left out.
+
+#Blue Team Stats
+opar <- par(no.readonly = TRUE)
+par(mfrow = c(3,6))
+boxplot(lol_ranked$blueWardsPlaced, xlab = "Blue Wards placed Boxplot")
+boxplot(lol_ranked$blueWardsDestroyed, xlab = "Blue Wards Destroyed Boxplot")
+boxplot(lol_ranked$blueKills, xlab = "Blue Team Kills Boxplot")
+boxplot(lol_ranked$blueDeaths, xlab = "Blue Team Deaths Boxplot")
+boxplot(lol_ranked$blueAssists, xlab = "Blue Team Assisits Boxplot")
+boxplot(lol_ranked$blueEliteMonsters, xlab = "Elite Monster Kills by Blue Team Boxplot")
+boxplot(lol_ranked$blueDragons, xlab = "Dragons Killed by Blue Team Boxplot")
+boxplot(lol_ranked$blueHeralds, xlab = "Heralds Killed by Blue Team Boxplot")
+boxplot(lol_ranked$blueTowersDestroyed, xlab = "Towers Destroyed by Blue Team Boxplot")
+boxplot(lol_ranked$blueTotalGold, xlab = "Blue Team Total Gold Boxplot")
+boxplot(lol_ranked$blueAvgLevel, xlab = "Blue Team Avg Player Level Boxplot")
+boxplot(lol_ranked$blueTotalExperience, xlab = "Blue Team Total Experience Boxplot")
+boxplot(lol_ranked$blueTotalMinionsKilled, xlab = "Total Minions Killed by Blue Team Boxplot")
+boxplot(lol_ranked$blueTotalJungleMinionsKilled, xlab = "Total Jungle Minions Killed by Blue Team Boxplot")
+boxplot(lol_ranked$blueGoldDiff, xlab = "Gold Difference between Blue and Red Team Boxplot")
+boxplot(lol_ranked$blueExperienceDiff, xlab = "Experience Difference between Blue and Red Team Boxplot")
+boxplot(lol_ranked$blueCSPerMin, xlab = "Minions Rate per Minute Killed by Blue Team Boxplot")
+boxplot(lol_ranked$blueGoldPerMin, xlab = "Gold per Minute Acquired by Blue Team Boxplot")
+
+#Red Team Stats
+opar <- par(no.readonly = TRUE)
+par(mfrow = c(3,6))
+boxplot(lol_ranked$redWardsPlaced, xlab = "Red Wards placed Boxplot")
+boxplot(lol_ranked$redWardsDestroyed, xlab = "Red Wards Destroyed Boxplot")
+boxplot(lol_ranked$redKills, xlab = "Red Team Kills Boxplot")
+boxplot(lol_ranked$redDeaths, xlab = "Red Team Deaths Boxplot")
+boxplot(lol_ranked$redAssists, xlab = "Red Team Assisits Boxplot")
+boxplot(lol_ranked$redEliteMonsters, xlab = "Elite Monster Kills by Red Team Boxplot")
+boxplot(lol_ranked$redDragons, xlab = "Dragons Killed by Red Team Boxplot")
+boxplot(lol_ranked$redHeralds, xlab = "Heralds Killed by Red Team Boxplot")
+boxplot(lol_ranked$redTowersDestroyed, xlab = "Towers Destroyed by Red Team Boxplot")
+boxplot(lol_ranked$redTotalGold, xlab = "Red Team Total Gold Boxplot")
+boxplot(lol_ranked$redAvgLevel, xlab = "Red Team Avg Player Level Boxplot")
+boxplot(lol_ranked$redTotalExperience, xlab = "Red Team Total Experience Boxplot")
+boxplot(lol_ranked$redTotalMinionsKilled, xlab = "Total Minions Killed by Red Team Boxplot")
+boxplot(lol_ranked$redTotalJungleMinionsKilled, xlab = "Total Jungle Minions Killed by Red Team Boxplot")
+boxplot(lol_ranked$redGoldDiff, xlab = "Gold Difference between Red and Blue Team Boxplot")
+boxplot(lol_ranked$redExperienceDiff, xlab = "Experience Difference between Red and Blue Team Boxplot")
+boxplot(lol_ranked$redCSPerMin, xlab = "Minions Rate per Minute Killed by Red Team Boxplot")
+boxplot(lol_ranked$redGoldPerMin, xlab = "Gold per Minute Acquired by Red Team Boxplot")
+```
+
+
+# 2. Data Cleaning
+```{r}
+# Removing the ID column
+lol_ranked <- select(lol_ranked,-1)
+lol_ranked
+```
+
+```{r}
+# Converting integer variables into numeric.
+lol_ranked[,-1] <- sapply(lol_ranked[,-1],as.numeric)
+lol_ranked[,-4] <- sapply(lol_ranked[,-4],as.numeric)
+lol_ranked[,-23] <- sapply(lol_ranked[,-23],as.numeric)
+
+# Converting the blueFirstBlood, redFirstBlood into factor variables. 
+lol_ranked$blueFirstBlood <- as.factor(lol_ranked$blueFirstBlood)
+lol_ranked$redFirstBlood <- as.factor(lol_ranked$redFirstBlood)
+
+#Checking the data structure with the new factors added.
+str(lol_ranked)
+```
+
+```{r}
+#Checking for anomalies. The experience difference of both teams should compliment each other, for example, if blue team has -7 experience, the read team should have it as 7.
+exp_diff <- lol_ranked$blueExperienceDiff + lol_ranked$redExperienceDiff
+lol_ranked_exp_diff <- sum(exp_diff)
+lol_ranked_exp_diff
+
+#The gold difference variables are also checked.
+gold_diff <- lol_ranked$blueGoldDiff + lol_ranked$redGoldDiff
+lol_ranked_gold_diff <- sum(gold_diff)
+lol_ranked_gold_diff
+```
+
+
+```{r}
+# Checking if the ratio between total minions killed by blue team and amount of minions killed per minute adds up to 10min of game time which, as seen below, it does.
+lol_blue_time <- lol_ranked$blueTotalMinionsKilled / lol_ranked$blueCSPerMin
+lol_blue_time
+
+red_time_lol <- lol_ranked$redTotalMinionsKilled / lol_ranked$redCSPerMin
+red_time_lol
+
+# Visualising the above variables, in a subset. This shows that the same rate is maintained in each match.
+lol_CS_rate <- select(lol_ranked,15, 19, 34, 38)
+lol_CS_rate
+
+# Based on the information above, it is discovered that the total minions killed by each team has the same rate per minute, therefore the CSPerMin variablels could be removed from the data frame.
+lol_ranked <- subset(lol_ranked,select=-c(blueCSPerMin, redCSPerMin))
+lol_ranked
+
+# The same applies for GoldPerMin variables.
+lol_gold_rate <- select(lol_ranked,12, 17, 30, 35)
+lol_gold_rate
+
+lol_ranked <- subset(lol_ranked,select=-c(blueGoldPerMin, redGoldPerMin))
+lol_ranked
+```
+```{r}
+#Analysing the data set, it is noticed that there are other columns related to each other, for example, blueEliteMonsters is a sum of values from blueDragons and blueHeralds. Same goes for the red team. These can be removed.
+lol_clean_data <- subset(lol_ranked,select=-c(blueDragons, blueHeralds, redDragons, redHeralds))
+lol_clean_data
+```
+
+
+# 3. Exploratory Data Analysis (EDA) - Unsupervised Techniques
+
+# 3.1 Feature Analysis
+```{r}
+#Inspecting the cleaned data set
+str(lol_clean_data)
+```
+
+```{r}
+#Summary statistics on the cleaned data set
+summary(lol_clean_data)
+```
+
+
+```{r}
+# Frequency table
+table(lol_clean_data$blueWins)
+```
+
+```{r}
+# Generating histograms for the numerical variables of blue team.
+opar <- par(no.readonly = TRUE)
+par(mfrow = c(3,5))
+hist(lol_clean_data$blueWardsPlaced,main="No.1", xlab="Blue Wards Placed Histogram")
+hist(lol_clean_data$blueWardsDestroyed,main="No.2", xlab="Blue Wards Destroyed Histogram")
+hist(lol_clean_data$blueKills,main="No.3", xlab="Blue Team Kills Histogram")
+hist(lol_clean_data$blueDeaths,main="No.4", xlab="Blue Team Deaths Histogram")
+hist(lol_clean_data$blueAssists,main="No.5", xlab="Blue Team Assists Histogram")
+hist(lol_clean_data$blueEliteMonsters,main="No.6", xlab="Elite Monster Kills by Blue Team Histogram")
+hist(lol_clean_data$blueTowersDestroyed,main="No.7", xlab="Towers Destroyed by Blue Team Histogram")
+hist(lol_clean_data$blueTotalGold,main="No.8", xlab="Blue Team Total Gold Histogram")
+hist(lol_clean_data$blueAvgLevel,main="No.9", xlab="Blue Team Avg Player Level Histogram")
+hist(lol_clean_data$blueTotalExperience,main="No.10", xlab="Blue Team Total Experience Histogram")
+hist(lol_clean_data$blueTotalMinionsKilled,main="No.11", xlab="Total Minions Killed by Blue Team Histogram")
+hist(lol_clean_data$blueTotalJungleMinionsKilled,main="No.12", xlab="Total Jungle Minions Killed by Blue Team Histogram")
+hist(lol_clean_data$blueGoldDiff,main="No.13", xlab="Difference between Blue and Red Team Histogram")
+hist(lol_clean_data$blueExperienceDiff,main="No.14", xlab="Exp Diff between Blue and Red Team Histogram")
+
+# Generating histograms for the numerical variables of red team.
+opar <- par(no.readonly = TRUE)
+par(mfrow = c(3,5))
+hist(lol_clean_data$redWardsPlaced,main="No.1", xlab="Red Wards Placed Histogram")
+hist(lol_clean_data$redWardsDestroyed,main="No.2", xlab="Red Wards Destroyed Histogram")
+hist(lol_clean_data$redKills,main="No.3", xlab="Red Team Kills Histogram")
+hist(lol_clean_data$redDeaths,main="No.4", xlab="Red Team Deaths Histogram")
+hist(lol_clean_data$redAssists,main="No.5", xlab="Red Team Assists Histogram")
+hist(lol_clean_data$redEliteMonsters,main="No.6", xlab="Elite Monster Kills by Red Team Histogram")
+hist(lol_clean_data$redTowersDestroyed,main="No.7", xlab="Towers Destroyed by Red Team Histogram")
+hist(lol_clean_data$redTotalGold,main="No.8", xlab="Red Team Total Gold Histogram")
+hist(lol_clean_data$redAvgLevel,main="No.9", xlab="Red Team Avg Player Level Histogram")
+hist(lol_clean_data$redTotalExperience,main="No.10", xlab="Red Team Total Experience Histogram")
+hist(lol_clean_data$redTotalMinionsKilled,main="No.11", xlab="Total Minions Killed by Red Team Histogram")
+hist(lol_clean_data$redTotalJungleMinionsKilled,main="No.12", xlab="Total Jungle Minions Killed by Red Team Histogram")
+hist(lol_clean_data$redGoldDiff,main="No.13", xlab="Difference between Red and Blue Team Histogram")
+hist(lol_clean_data$redExperienceDiff,main="No.14", xlab="Exp Diff between Red and Blue Team Histogram")
+```
+
+
+```{r}
+# Generating a variable that holds a matrix of the skewness results for each attribute.
+lol_skew <- sapply(lol_clean_data[-c(1, 4, 19)],function(x) c(skew=skewness(x)))
+lol_skew
+```
+
+
+```{r}
+#Calculating correlation coefficient for target variable and the rest of variables, with Pearson correlation.
+cor(lol_clean_data$blueWins, lol_clean_data$blueWardsPlaced, method = c("pearson")) # No linear relationship (8.695109e-05).
+cor(lol_clean_data$blueWins, lol_clean_data$blueWardsDestroyed, method = c("pearson")) # No linear relationship (0.0442468).
+cor(lol_clean_data$blueWins, lol_clean_data$blueKills, method = c("pearson")) # Weak positive linear relationship (0.3373576).
+cor(lol_clean_data$blueWins, lol_clean_data$blueDeaths, method = c("pearson")) #Weak negative linear relationship (-0.3392967).
+cor(lol_clean_data$blueWins, lol_clean_data$blueAssists, method = c("pearson")) # Weak positive linear relationship (0.276685).
+cor(lol_clean_data$blueWins, lol_clean_data$blueEliteMonsters, method = c("pearson")) # Weak positive linear relationship (0.2219442).
+cor(lol_clean_data$blueWins, lol_clean_data$blueTowersDestroyed, method = c("pearson")) # Weak positive linear relationship (0.1155665).
+cor(lol_clean_data$blueWins, lol_clean_data$blueTotalGold, method = c("pearson")) # Weak positive linear relationship (0.4172126).
+cor(lol_clean_data$blueWins, lol_clean_data$blueAvgLevel, method = c("pearson")) # Weak positive linear relationship (0.3578198).
+cor(lol_clean_data$blueWins, lol_clean_data$blueTotalExperience, method = c("pearson")) # Weak positive linear relationship (0.3961407).
+cor(lol_clean_data$blueWins, lol_clean_data$blueTotalMinionsKilled, method = c("pearson")) # Weak positive linear relationship (0.2249095).
+cor(lol_clean_data$blueWins, lol_clean_data$blueTotalJungleMinionsKilled, method = c("pearson")) # Weak positive linear relationship (0.1314449).
+cor(lol_clean_data$blueWins, lol_clean_data$blueGoldDiff, method = c("pearson")) # Weak positive linear relationship (0.5111191).
+cor(lol_clean_data$blueWins, lol_clean_data$blueExperienceDiff, method = c("pearson")) # Weak positive linear relationship (0.4895579).
+
+cor(lol_clean_data$blueWins, lol_clean_data$redWardsPlaced, method = c("pearson")) # No linear relationship (-0.02367124).
+cor(lol_clean_data$blueWins, lol_clean_data$redWardsDestroyed, method = c("pearson")) # No linear relationship (-0.05540031).
+cor(lol_clean_data$blueWins, lol_clean_data$redKills, method = c("pearson")) #Weak negative linear relationship (-0.3392967).
+cor(lol_clean_data$blueWins, lol_clean_data$redDeaths, method = c("pearson")) # Weak positive linear relationship (0.3373576).
+cor(lol_clean_data$blueWins, lol_clean_data$redAssists, method = c("pearson")) #Weak negative linear relationship (-0.2710469).
+cor(lol_clean_data$blueWins, lol_clean_data$redEliteMonsters, method = c("pearson")) #Weak negative linear relationship (-0.2215511).
+cor(lol_clean_data$blueWins, lol_clean_data$redTowersDestroyed, method = c("pearson")) #Weak negative linear relationship (-0.1036956).
+cor(lol_clean_data$blueWins, lol_clean_data$redTotalGold, method = c("pearson")) #Weak negative linear relationship (-0.4113962).
+cor(lol_clean_data$blueWins, lol_clean_data$redAvgLevel, method = c("pearson")) #Weak negative linear relationship (-0.3521268).
+cor(lol_clean_data$blueWins, lol_clean_data$redTotalExperience, method = c("pearson")) #Weak negative linear relationship (-0.3875876).
+cor(lol_clean_data$blueWins, lol_clean_data$redTotalMinionsKilled, method = c("pearson")) #Weak negative linear relationship (-0.2121715).
+cor(lol_clean_data$blueWins, lol_clean_data$redTotalJungleMinionsKilled, method = c("pearson")) #Weak negative linear relationship (-0.1109935).
+cor(lol_clean_data$blueWins, lol_clean_data$redGoldDiff, method = c("pearson")) #Weak negative linear relationship (-0.5111191).
+cor(lol_clean_data$blueWins, lol_clean_data$redExperienceDiff, method = c("pearson")) #Weak negative linear relationship (-0.4895579).
+
+```
+
+```{r}
+# Plotting the weak positive linear relationships.
+ggplot(lol_clean_data, aes(x=blueKills, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Blue Team Kills Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=blueAssists, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Blue Team Assisits Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=blueEliteMonsters, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Elite Monster Kills by Blue Team Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=blueTowersDestroyed, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Towers Destroyed by Blue Team Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=blueTotalGold, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Blue Team Total Gold Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=blueAvgLevel, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Blue Team Avg Player Level Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=blueTotalExperience, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Blue Team Total Experience Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=blueTotalMinionsKilled, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Total Minions Killed by Blue Team Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=blueTotalJungleMinionsKilled, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Total Jungle Minions Killed by Blue Team Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=blueGoldDiff, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Gold Difference between Blue and Red Team Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=blueExperienceDiff, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Experience Difference between Blue and Red Team Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=redDeaths, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Red Team Deaths Relation") + geom_smooth(formula = y ~ x, method="lm")
+
+```
+
+
+```{r}
+# Plotting the weak negative linear relationships.
+ggplot(lol_clean_data, aes(x=blueDeaths, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Blue Team Deaths Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=redKills, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Red Team Kills Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=redAssists, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Red Team Assisits Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=redEliteMonsters, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Elite Monster Kills by Red Team Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=redTowersDestroyed, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Towers Destroyed by Red Team Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=redTotalGold, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Red Team Total Gold Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=redAvgLevel, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Red Team Avg Player Level Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=redTotalExperience, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Red Team Total Experience Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=redTotalMinionsKilled, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Total Minions Killed by Red Team Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=redTotalJungleMinionsKilled, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Total Jungle Minions Killed by Red Team Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=redGoldDiff, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Gold Difference between Red and Blue Team Relation") + geom_smooth(formula = y ~ x, method="lm")
+ggplot(lol_clean_data, aes(x=redExperienceDiff, y=blueWins)) + geom_point()+ ggtitle("Blue Results & Experience Difference between Red and Blue Team Relation") + geom_smooth(formula = y ~ x, method="lm")
+
+```
+
+# 3.2 Hierarchical clustering
+```{r}
+# Checking clean data set structure
+str(lol_clean_data)
+```
+
+```{r}
+# Creating new data set without factors and target variable, data scaling can only be performed on numerical data.
+lol_clean_data_num <- select(lol_clean_data,-1,-4,-19)
+lol_clean_data_num
+```
+
+
+```{r}
+# Data has to be normalised due to feature scales being different.
+lol_clean_data2 <- as.data.frame(scale(lol_clean_data_num))
+lol_clean_data2
+```
+
+
+```{r}
+# Building a distance matrix and since all variables are numerical, euclidean method is the adequate one.
+lol_dist_matrix <- dist(lol_clean_data2, method = 'euclidean')
+```
+
+
+```{r}
+# Using the average linkage method for HC
+lol_HC_avg <- hclust(lol_dist_matrix, method = 'average')
+```
+
+
+```{r}
+# Plotting the results into a dendrogram
+plot(lol_HC_avg)
+```
+
+
+```{r}
+# Using abline function to have a better visualisation of the cut lines. Using the rect.hclust function to compartmentalize each created cluster.
+plot(lol_HC_avg)
+rect.hclust(lol_HC_avg , k = 3, border = 2:6)
+abline(h = 3, col = 'red')
+```
+
+
+```{r}
+# Deciding to cut between 5 and 10 height, therefore we will get 3 clusters.
+lol_cut_avg <- cutree(lol_HC_avg, k = 3)
+```
+
+
+```{r}
+# Visualising the tree with different color branches by using the "color_branches" function.
+avg_plot_obj <- as.dendrogram(lol_HC_avg)
+avg_dend_branch <- color_branches(avg_plot_obj, h = 3)
+plot(avg_dend_branch)
+```
+
+
+```{r}
+# Merging the HC results to the original data frame with the "mutate" function.
+lol_scaled_with_cl <- mutate(lol_clean_data, cluster = lol_cut_avg)
+lol_scaled_with_cl
+```
+
+
+```{r}
+# Counting occurrences in each cluster. 1st has 9851 occurrences, 2nd has only 10 and 3rd has 18.
+count(lol_scaled_with_cl, cluster)
+```
+
+```{r}
+# Checking for trends in other features, with ggplot2, based on the clustering. 
+#Pairing the target variable against each of the blue and red team variables that have the same meaning.
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueWardsPlaced, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redWardsPlaced, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueWardsDestroyed, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redWardsDestroyed, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueFirstBlood, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redFirstBlood, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueKills, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redKills, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueDeaths, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redDeaths, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueAssists, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redAssists, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueEliteMonsters, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redEliteMonsters, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueTowersDestroyed, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redTowersDestroyed, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueTotalGold, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redTotalGold, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueAvgLevel, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redAvgLevel, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueTotalExperience, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redTotalExperience, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueTotalMinionsKilled, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redTotalMinionsKilled, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueTotalJungleMinionsKilled, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redTotalJungleMinionsKilled, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueGoldDiff, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redGoldDiff, color = factor(cluster))) + geom_point()
+
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = blueExperienceDiff, color = factor(cluster))) + geom_point()
+ggplot(lol_scaled_with_cl, aes(x=blueWins, y = redExperienceDiff, color = factor(cluster))) + geom_point()
+```
+
+
+
+# 3.3 PCA
+```{r}
+#Using the same data set from the HC technique, that only contains numerical data and is scaled.
+lol_clean_data2
+```
+
+```{r}
+# Computing the Principal Components and their summary statistics.
+lol_clean_data2.pca <- prcomp(lol_clean_data2, center = TRUE, scale. = TRUE)
+summary(lol_clean_data2.pca)
+```
+
+
+```{r}
+# PCA data name and structure. (sdev, rotation - correlation/anti correlation between original attributes and principal components, centre point, scale, x - value of scores for each principal components)
+names(lol_clean_data2.pca)
+str(lol_clean_data2.pca)
+```
+
+
+```{r}
+# Eigenvalues. The eigenvectors are the values of the scaled data in lol_clean_data2 data frame.
+eigenvalues <- lol_clean_data2.pca$sdev* lol_clean_data2.pca$sdev
+eigenvalues
+```
+
+
+```{r}
+# Correlation between original data set and the PC scores, rounded to 3 digits.
+round(cor(lol_clean_data2, lol_clean_data2.pca$x), 3)
+```
+
+
+```{r}
+# Variance plot of the first 10 Principal Components. Analysing proportion of variance and it is discovered that over 50%  variation lies in the first 8 PCs. Alternatively, all PCs that have sdev over 1 can also be chosen, again adding up to 8.
+plot(lol_clean_data2.pca, type = "l")
+abline(1,0, col = "red", lty = 2)
+```
+```{r}
+# Plotting the PCs.
+ggbiplot(lol_clean_data2.pca, scale = 0)
+```
+
+
+```{r}
+# Merging original data frame with first 2 PCs.
+lol_pca <- cbind (lol_clean_data, lol_clean_data2.pca$x[, 1:2])
+```
+
+
+```{r}
+# Pearson correlations between original attributes and first two principal components.
+lol_data_cor <- cor(lol_clean_data2, lol_pca[, 32:33])
+lol_data_cor
+
+#There is strong positive correlation between PC1 and blueKills(0.65), blueAssists(0.54), blueTotalGold(0.79), blueAvgLevel(0.70), blueTotalExperience(0.76), blueGoldDiff(0.97), blueExperienceDiff(0.95), redDeaths(0.65).
+
+# There is no strong positive correlation between PC2 and any attributes.
+
+#There is strong negative correlation between PC1 and blueDeaths(-0.64), redKills(-0.64), redTotalGold(-0.78), redAvgLevel(-0.70), redGoldDiff(-0.97), redExperienceDiff(-0.95).
+
+#There is strong negative correlation between PC2 and blueKills(-0.67), blueDeaths(-0.68), blueAssists(-0.60), redKills(-0.68), redDeaths(-0.67), redAssists(-0.61).
+```
+```{r}
+# Pearson correlation between target variable and first two principal components.
+lol_data_cor2 <- cor(lol_clean_data$blueWins, lol_pca[, 32:33])
+lol_data_cor2
+
+# There is strong correlation between PC1 and target variable.
+# There is no correlation between PC2 and target variable.
+```
+
+```{r}
+# Results plotting. Colored the target variable to have a better view of where the majority of data is located.
+ggplot(lol_pca, aes(PC1, PC2, col = blueWins, fill = blueWins)) +
+  stat_ellipse(geom = "polygon", col = "black", alpha = 0.5) + 
+  ggtitle("blueWins results within the first 2 principal components") +
+  geom_point(shape = 21, col = "black")
+```
+
+# 4. Modelling - Supervised Techniques
+
+# 4a. Logistic Regression
+
+```{r}
+# Following feature analysis from the EDA section, a multiple logistic regression model is fitted. It will use the independent variables that were identified in the EDA process and have weak positive and negative linear relationships with the target variable "blueWins". Such model depends on data not containing multicollinearity, meaning that there is no high correlation between the independent variable. This is checked through VIF, or Variance Inflation Factor, from the "car" library. VIF values over 2.5 are considered high so they will be removed.
+```
+
+# 4a. 1. Checking for collinearity on the relationship between independent variables with weak positive linear relationship.
+```{r}
+# VIF on blueKills and blueAssists variables.
+lol_lm <- lm(blueWins~blueKills+blueAssists, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and blueEliteMonsters variables.
+lol_lm <- lm(blueWins~blueKills+blueEliteMonsters, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and blueTowersDestroyed variables.
+lol_lm <- lm(blueWins~blueKills+blueTowersDestroyed, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and blueTotalGold variables.
+lol_lm <- lm(blueWins~blueKills+blueTotalGold, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and blueAvgLevel variables.
+lol_lm <- lm(blueWins~blueKills+blueAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and blueTotalExperience variables.
+lol_lm <- lm(blueWins~blueKills+blueTotalExperience, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and blueTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueKills+blueTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and blueGoldDiff variables.
+lol_lm <- lm(blueWins~blueKills+blueGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and blueExperienceDiff variables.
+lol_lm <- lm(blueWins~blueKills+blueExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and redDeaths variables. Error given that are aliased coefficients in the model, high collinearity. It will be removed.
+#lol_lm <- lm(blueWins~blueKills+redDeaths, data=lol_clean_data)
+#vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and blueTowersDestroyed variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+blueTowersDestroyed, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and blueTotalGold variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+blueTotalGold, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and blueAvgLevel variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+blueAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and blueTotalExperience variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+blueTotalExperience, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and blueTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+blueTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and blueTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+blueTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and blueGoldDiff variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+blueGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and blueExperienceDiff variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+blueExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTowersDestroyed and blueAvgLevel variables.
+lol_lm <- lm(blueWins~blueTowersDestroyed+blueAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTowersDestroyed and blueTotalExperience variables.
+lol_lm <- lm(blueWins~blueTowersDestroyed+blueTotalExperience, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTowersDestroyed and blueTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueTowersDestroyed+blueTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTowersDestroyed and blueTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueTowersDestroyed+blueTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTowersDestroyed and blueGoldDiff variables.
+lol_lm <- lm(blueWins~blueTowersDestroyed+blueGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTowersDestroyed and blueExperienceDiff variables.
+lol_lm <- lm(blueWins~blueTowersDestroyed+blueExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalGold and blueAvgLevel variables.
+lol_lm <- lm(blueWins~blueTotalGold+blueAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalGold and blueTotalExperience variables.
+lol_lm <- lm(blueWins~blueTotalGold+blueTotalExperience, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalGold and blueTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueTotalGold+blueTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalGold and blueTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueTotalGold+blueTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalGold and blueGoldDiff variables.
+lol_lm <- lm(blueWins~blueTotalGold+blueGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalGold and blueExperienceDiff variables.
+lol_lm <- lm(blueWins~blueTotalGold+blueExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueAvgLevel and blueTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueAvgLevel+blueTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueAvgLevel and blueTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueAvgLevel+blueTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueAvgLevel and blueExperienceDiff variables.
+lol_lm <- lm(blueWins~blueAvgLevel+blueExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalMinionsKilled and blueTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+blueTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalMinionsKilled and blueExperienceDiff variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+blueExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalJungleMinionsKilled and blueExperienceDiff variables.
+lol_lm <- lm(blueWins~blueTotalJungleMinionsKilled+blueExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+
+# 4a. 2. Checking for collinearity on the relationship between independent variables with weak negative linear relationship.
+```{r}
+# VIF on blueDeaths and redKills variables. redKills is removed due to high collinearity.
+#lol_lm <- lm(blueWins~blueDeaths+redKills, data=lol_clean_data)
+#vif(lol_lm)
+```
+```{r}
+# VIF on blueDeaths and redAssists variables.
+lol_lm <- lm(blueWins~blueDeaths+redAssists, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueDeaths and redEliteMonsters variables.
+lol_lm <- lm(blueWins~blueDeaths+redEliteMonsters, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueDeaths and redTowersDestroyed variables.
+lol_lm <- lm(blueWins~blueDeaths+redTowersDestroyed, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueDeaths and redTotalGold variables.
+lol_lm <- lm(blueWins~blueDeaths+redTotalGold, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueDeaths and redAvgLevel variables.
+lol_lm <- lm(blueWins~blueDeaths+redAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueDeaths and redTotalExperience variables.
+lol_lm <- lm(blueWins~blueDeaths+redTotalExperience, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueDeaths and redTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueDeaths+redTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueDeaths and redTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueDeaths+redTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueDeaths and redGoldDiff variables.
+lol_lm <- lm(blueWins~blueDeaths+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueDeaths and redExperienceDiff variables.
+lol_lm <- lm(blueWins~blueDeaths+redExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+
+```{r}
+# VIF on redEliteMonsters and redTowersDestroyed variables.
+lol_lm <- lm(blueWins~redEliteMonsters+redTowersDestroyed, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redEliteMonsters and redAvgLevel variables.
+lol_lm <- lm(blueWins~redEliteMonsters+redAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redEliteMonsters and redTotalExperience variables.
+lol_lm <- lm(blueWins~redEliteMonsters+redTotalExperience, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redEliteMonsters and redTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~redEliteMonsters+redTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redEliteMonsters and redTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~redEliteMonsters+redTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redEliteMonsters and redGoldDiff variables.
+lol_lm <- lm(blueWins~redEliteMonsters+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redEliteMonsters and redExperienceDiff variables.
+lol_lm <- lm(blueWins~redEliteMonsters+redExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redTowersDestroyed and redAvgLevel variables.
+lol_lm <- lm(blueWins~redTowersDestroyed+redAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redTowersDestroyed and redTotalExperience variables.
+lol_lm <- lm(blueWins~redTowersDestroyed+redTotalExperience, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redTowersDestroyed and redTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~redTowersDestroyed+redTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redTowersDestroyed and redTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~redTowersDestroyed+redTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redTowersDestroyed and redGoldDiff variables.
+lol_lm <- lm(blueWins~redTowersDestroyed+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redTowersDestroyed and redExperienceDiff variables.
+lol_lm <- lm(blueWins~redTowersDestroyed+redExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redAvgLevel and redTotalExperience variables.
+lol_lm <- lm(blueWins~redAvgLevel+redTotalExperience, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redAvgLevel and redTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~redAvgLevel+redTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redAvgLevel and redTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~redAvgLevel+redTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redAvgLevel and redGoldDiff variables.
+lol_lm <- lm(blueWins~redAvgLevel+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redAvgLevel and redExperienceDiff variables.
+lol_lm <- lm(blueWins~redAvgLevel+redExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redTotalMinionsKilled and redTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~redTotalMinionsKilled+redTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redTotalMinionsKilled and redGoldDiff variables.
+lol_lm <- lm(blueWins~redTotalMinionsKilled+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redTotalMinionsKilled and redExperienceDiff variables.
+lol_lm <- lm(blueWins~redTotalMinionsKilled+redExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redTotalJungleMinionsKilled and redGoldDiff variables.
+lol_lm <- lm(blueWins~redTotalJungleMinionsKilled+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redTotalJungleMinionsKilled and redExperienceDiff variables.
+lol_lm <- lm(blueWins~redTotalJungleMinionsKilled+redExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on redGoldDiff and redExperienceDiff variables.
+lol_lm <- lm(blueWins~redGoldDiff+redExperienceDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+
+# 4a. 3. Checking for collinearity on the relationship between independent variables with both weak negative and weak positive linear relationship.
+```{r}
+# VIF on blueKills and blueDeaths variables.
+lol_lm <- lm(blueWins~blueKills+blueDeaths, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and redEliteMonsters variables.
+lol_lm <- lm(blueWins~blueKills+redEliteMonsters, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and redTowersDestroyed variables.
+lol_lm <- lm(blueWins~blueKills+redTowersDestroyed, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and redAvgLevel variables.
+lol_lm <- lm(blueWins~blueKills+redAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and redTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueKills+redTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and redTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueKills+redTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueKills and redGoldDiff variables.
+lol_lm <- lm(blueWins~blueKills+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and blueDeaths variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+blueDeaths, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and redEliteMonsters variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+redEliteMonsters, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and redTowersDestroyed variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+redTowersDestroyed, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and redAvgLevel variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+redAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and redTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+redTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and redTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+redTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueEliteMonsters and redGoldDiff variables.
+lol_lm <- lm(blueWins~blueEliteMonsters+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTowersDestroyed and blueDeaths variables.
+lol_lm <- lm(blueWins~blueTowersDestroyed+blueDeaths, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTowersDestroyed and redEliteMonsters variables.
+lol_lm <- lm(blueWins~blueTowersDestroyed+redEliteMonsters, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTowersDestroyed and redTowersDestroyed variables.
+lol_lm <- lm(blueWins~blueTowersDestroyed+redTowersDestroyed, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTowersDestroyed and redAvgLevel variables.
+lol_lm <- lm(blueWins~blueTowersDestroyed+redAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTowersDestroyed and redTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueTowersDestroyed+redTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTowersDestroyed and redTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueTowersDestroyed+redTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTowersDestroyed and redGoldDiff variables.
+lol_lm <- lm(blueWins~blueTowersDestroyed+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueAvgLevel and blueDeaths variables.
+lol_lm <- lm(blueWins~blueAvgLevel+blueDeaths, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueAvgLevel and redEliteMonsters variables.
+lol_lm <- lm(blueWins~blueAvgLevel+redEliteMonsters, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueAvgLevel and redTowersDestroyed variables.
+lol_lm <- lm(blueWins~blueAvgLevel+redTowersDestroyed, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueAvgLevel and redAvgLevel variables.
+lol_lm <- lm(blueWins~blueAvgLevel+redAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueAvgLevel and redTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueAvgLevel+redTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueAvgLevel and redTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueAvgLevel+redTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueAvgLevel and redGoldDiff variables.
+lol_lm <- lm(blueWins~blueAvgLevel+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalExperience and blueDeaths variables.
+lol_lm <- lm(blueWins~blueTotalExperience+blueDeaths, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalExperience and redEliteMonsters variables.
+lol_lm <- lm(blueWins~blueTotalExperience+redEliteMonsters, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalExperience and redTowersDestroyed variables.
+lol_lm <- lm(blueWins~blueTotalExperience+redTowersDestroyed, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalExperience and redAvgLevel variables.
+lol_lm <- lm(blueWins~blueTotalExperience+redAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalExperience and redTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueTotalExperience+redTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalExperience and redTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueTotalExperience+redTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalExperience and redGoldDiff variables.
+lol_lm <- lm(blueWins~blueTotalExperience+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalMinionsKilled and blueDeaths variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+blueDeaths, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalMinionsKilled and redEliteMonsters variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+redEliteMonsters, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalMinionsKilled and redTowersDestroyed variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+redTowersDestroyed, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalMinionsKilled and redAvgLevel variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+redAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalMinionsKilled and redTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+redTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalMinionsKilled and redTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+redTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalMinionsKilled and redGoldDiff variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalJungleMinionsKilled and blueDeaths variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+blueDeaths, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalJungleMinionsKilled and redEliteMonsters variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+redEliteMonsters, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalJungleMinionsKilled and redTowersDestroyed variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+redTowersDestroyed, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalJungleMinionsKilled and redAvgLevel variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+redAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalJungleMinionsKilled and redTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+redTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalJungleMinionsKilled and redTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+redTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueTotalJungleMinionsKilled and redGoldDiff variables.
+lol_lm <- lm(blueWins~blueTotalMinionsKilled+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueExperienceDiff and blueDeaths variables.
+lol_lm <- lm(blueWins~blueExperienceDiff+blueDeaths, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueExperienceDiff and redEliteMonsters variables.
+lol_lm <- lm(blueWins~blueExperienceDiff+redEliteMonsters, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueExperienceDiff and redTowersDestroyed variables.
+lol_lm <- lm(blueWins~blueExperienceDiff+redTowersDestroyed, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueExperienceDiff and redAvgLevel variables.
+lol_lm <- lm(blueWins~blueExperienceDiff+redAvgLevel, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueExperienceDiff and redTotalMinionsKilled variables.
+lol_lm <- lm(blueWins~blueExperienceDiff+redTotalMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueExperienceDiff and redTotalJungleMinionsKilled variables.
+lol_lm <- lm(blueWins~blueExperienceDiff+redTotalJungleMinionsKilled, data=lol_clean_data)
+vif(lol_lm)
+```
+```{r}
+# VIF on blueExperienceDiff and redGoldDiff variables.
+lol_lm <- lm(blueWins~blueExperienceDiff+redGoldDiff, data=lol_clean_data)
+vif(lol_lm)
+```
+
+```{r}
+# Variables to be removed due to high VIF values: 
+# 1. Weak positive relationships side: blueAssists, redDeaths, blueTotalGold, blueGoldDiff.
+# 2. Weak negative relationships side: redKills, redAssists, redTotalGold, redTotalExperience, redExperienceDiff.
+# 3. Both weak negative and positive relationships: redGoldDiff.
+```
+
+```{r}
+# Removing all the variables that caused high VIF. 
+lol_LR_data <- subset(lol_clean_data,select=-c(blueAssists, redDeaths, blueTotalGold, blueGoldDiff, redKills, redAssists, redTotalGold, redTotalExperience, redExperienceDiff, redGoldDiff))
+```
+
+```{r}
+# Checking new data frame and its structure. It has now been reduced to 21 variables.
+View(lol_LR_data)
+str(lol_LR_data)
+```
+
+```{r}
+# Setting seed and splitting the data for test and training set.
+set.seed(1)
+LR_n_rows <- nrow(lol_LR_data)
+LR_training_idx <- sample.int(LR_n_rows, LR_n_rows * 0.7)
+LR_training_idx
+```
+
+```{r}
+# Training Data (70%)
+LR_train_data <- lol_LR_data[LR_training_idx,]
+str(LR_training_idx)
+```
+
+
+```{r}
+# Testing Data (30%)
+LR_test_data <- lol_LR_data[-LR_training_idx,]
+str(LR_test_data)
+```
+
+```{r}
+# Building the training Logistic Regression model
+lol_LR_model <- glm(blueWins~blueKills + blueEliteMonsters + blueTowersDestroyed + blueAvgLevel + blueTotalExperience + blueTotalMinionsKilled + blueTotalJungleMinionsKilled + blueExperienceDiff + blueDeaths + redEliteMonsters + redTowersDestroyed + redAvgLevel + redTotalMinionsKilled + redTotalJungleMinionsKilled, data=LR_train_data, family = "binomial")
+lol_LR_model
+```
+
+```{r}
+# Model summary
+summary(lol_LR_model)
+```
+```{r}
+# Checking the goodness of the fit of the model with the pseudo R^2 statistics. The result represents an excellent fit.
+PseudoR2(lol_LR_model)
+```
+```{r}
+# Displaying the most important variables that predict the target variable blueWins.
+varImp(lol_LR_model)
+```
+
+
+```{r}
+# Testing data based on Logistic Regression
+lol_test_pred <- predict(lol_LR_model, 
+                       LR_test_data, type = "response")
+lol_test_pred  
+```
+
+```{r}
+# Changing probabilities, rounding them up to either 1 or 0 whichever the value is closer to.
+lol_test_pred <- ifelse(lol_test_pred >0.5, 1, 0)
+lol_test_pred
+```
+
+```{r}
+# Confusion matrix to check LR accuracy.
+table(LR_test_data$blueWins, lol_test_pred)
+
+LR_accuracy <- mean(lol_test_pred != LR_test_data$blueWins)
+print(paste('Accuracy =', 1 - LR_accuracy))
+```
+
+```{r}
+# ROC Curve and its Plot + AUC Value
+lol_roc_pred <- prediction(lol_test_pred, LR_test_data$blueWins)
+lol_roc_pred
+
+lol_roc_perf <- performance(lol_roc_pred, measure = "tpr", x.measure = "fpr")
+lol_roc_perf
+
+plot(lol_roc_perf, colorize = TRUE, 
+     print.cutoffs.at = seq(0.1, by = 0.1), 
+     main = "Logistic Regression - ROC Curve")
+abline(a = 0, b = 1)
+
+y_list <- lol_roc_perf@y.values[[1]]
+
+# AUC Value
+lol_roc_perf2 <- performance(lol_roc_pred, measure = "auc")
+LR_auc <- lol_roc_perf2@y.values[[1]]
+LR_auc
+LR_auc <- round(LR_auc, 4)
+legend(.6, .4, LR_auc, title = "AUC", cex = 1)
+```
+```{r}
+my.statistics <- function(Actual,Predicted) {
+  confusion.table <- table(LR_test_data$blueWins,lol_test_pred)
+  output <- list(confusion.table=confusion.table)
+  TN <- confusion.table[1]
+  FN <- confusion.table[2]
+  FP <- confusion.table[3]
+  TP <- confusion.table[4]
+  output$accuracy <- (TP+TN)/sum(confusion.table)
+  output$precision <- (TP)/(TP+FP)
+  output$sensitivity <- (TP)/(TP+FN)
+  output$specificity <- (TN)/(TN+FP)
+  output$FPR <- (FP)/(TN+FP)
+  output$TPR <- (TP)/(TP+FN)
+  output$F1Score <- 2 * (output$precision * output$sensitivity) / (output$precision + output$sensitivity)
+  
+  return(output)
+}
+my.statistics(Actual = LR_test_data$blueWins, Predicted = lol_test_pred)
+```
+
+
+# 4b. k-nearest neighbours
+```{r}
+#Using the clean data set, that only contains numerical data and the target one.
+lol_kNN_data <- select(lol_clean_data,-4,-19)
+lol_kNN_data
+```
+```{r}
+#Scaling data.
+lol_kNN_data <- as.data.frame(scale(lol_kNN_data))
+lol_kNN_data
+```
+
+
+```{r}
+# Setting seed for splitting data, 70 training / 30 testing
+set.seed(1)
+lol_n_rows <- nrow(lol_kNN_data)
+lol_training_idx <- sample.int(lol_n_rows, lol_n_rows * 0.7)
+lol_training_idx
+```
+
+
+```{r}
+# Training Labels
+lol_training_labels <- lol_kNN_data[lol_training_idx,1]
+```
+
+
+```{r}
+# Testing Labels
+lol_testing_labels <- lol_kNN_data[-lol_training_idx]
+```
+
+
+```{r}
+# Training Data (70%)
+train_lol_data <- lol_kNN_data[lol_training_idx,]
+str(train_lol_data)
+```
+
+
+```{r}
+# Testing Data (30%)
+test_lol_data <- lol_kNN_data[-lol_training_idx,]
+str(test_lol_data)
+```
+
+
+```{r}
+# kNN Prediction model and its scores.
+lol_knn_pred <- knn(train = train_lol_data,
+                test = test_lol_data,
+                cl = lol_training_labels,
+                k = round(sqrt(nrow(train_lol_data))))
+```
+
+
+```{r}
+# New data frame containing the actual testing data and predicted one.
+lol_knn <- data.frame(
+  actual = test_lol_data,
+  predicted = lol_knn_pred)
+lol_knn
+
+# Table of actual vs. predicted values (kNN classification)
+table_lol_knn <- table(lol_knn[,c('actual.blueWins','predicted')])
+table_lol_knn
+```
+
+
+```{r}
+# kNN model - Accuracy
+lol_acc_knn <- sum(diag(table_lol_knn)) / sum(table_lol_knn)
+lol_acc_knn
+```
+
+```{r}
+# Binary classification requires for both arguments to have same levels and as vectors.
+lol_knn$predicted <- as.vector(lol_knn$predicted, mode = "numeric")
+test_lol_data$blueWins <- as.vector(test_lol_data$blueWins, mode = "numeric")
+
+# ROC Curve
+lol_pred_knn <- prediction(lol_knn$predicted, test_lol_data$blueWins )
+lol_perf_knn <- performance(lol_pred_knn, "tpr", "fpr")
+plot(lol_perf_knn, avg= "threshold", colorize=T, lwd=3, main="k-Nearest Neighbours - ROC Curve")
+abline(a = 0, b = 1)
+
+# AUC value
+lol_pred_knn2 <- performance(lol_pred_knn, measure = "auc")
+kNN_auc <- lol_pred_knn2@y.values[[1]]
+kNN_auc
+kNN_auc <- round(kNN_auc, 4)
+legend(.6, .4, kNN_auc, title = "AUC", cex = 1)
+```
+
+```{r}
+# Using "function" to plot the data metrics: table of true negative, false negative, false positive, true positive along with accuracy, precision, sensitivity, specificity, false positive rate.
+my.statistics <- function(Actual,Predicted) {
+  confusion.table <- table(lol_knn[,c('actual.blueWins','predicted')])
+  output <- list(confusion.table=confusion.table)
+  TN <- confusion.table[1]
+  FN <- confusion.table[2]
+  FP <- confusion.table[3]
+  TP <- confusion.table[4]
+  output$accuracy <- (TP+TN)/sum(confusion.table)
+  output$precision <- (TP)/(TP+FP)
+  output$sensitivity <- (TP)/(TP+FN)
+  output$specificity <- (TN)/(TN+FP)
+  output$FPR <- (FP)/(TN+FP)
+  output$TPR <- (TP)/(TP+FN)
+  output$F1Score <- 2 * (output$precision * output$sensitivity) / (output$precision + output$sensitivity)
+  
+  return(output)
+}
+my.statistics(Actual = actual, Predicted = predicted)
+
+```
+
+
+```{r}
+# Exporting the clean data csv so it can be used in jupyter with pyspark for Decision Tree model.
+write.csv(lol_clean_data,"C:/Users/LVada/Documents/Dissertation/lol_clean_data.csv", row.names = FALSE)
+```
+
+
+
+# 4c. Random Forest
+```{r}
+# Using the original clean data set.
+lol_clean_data
+str(lol_clean_data)
+```
+```{r}
+#Converting the target variable back into a factor otherwise the randomForest will use regression and not classification.
+lol_clean_data$blueWins <- as.factor(lol_clean_data$blueWins)
+```
+
+
+```{r}
+# Splitting data for model, 70 training / 30 testing
+lol_RF_rows <- nrow(lol_clean_data)
+lol_RF_idx <- sample.int(lol_RF_rows, lol_RF_rows * 0.7)
+lol_RF_idx
+```
+
+
+```{r}
+# Training data
+lol_RF_train <- lol_clean_data[lol_RF_idx,]
+str(lol_RF_train)
+```
+
+
+```{r}
+# Testing data
+lol_RF_test <- lol_clean_data[-lol_RF_idx,]
+str(lol_RF_test)
+```
+
+
+```{r}
+# Fitting Random Forest model to the training set
+set.seed(120)  # Setting seed
+lol_RF <- randomForest(blueWins ~ ., data = lol_RF_train, ntree = 100, mtry = 2, importance = TRUE)
+lol_RF
+
+# The OOB is 27.14% which means the accuracy is 72.86%.
+```
+
+
+```{r}
+# Prediction for testing set.
+lol_RF_pred <- predict(lol_RF, new_data = lol_RF_test$blueWins)
+```
+
+```{r}
+# Table of actual vs. predicted values (RF classification)
+table_lol_RF <- table(lol_RF_train$blueWins, lol_RF_pred)
+table_lol_RF
+
+```
+
+```{r}
+# Plotting model
+plot(lol_RF)
+```
+
+```{r}
+# Importance of model variables.
+importance(lol_RF)
+```
+
+```{r}
+# Variable importance plot
+varImpPlot(lol_RF)
+```
+
+```{r}
+# Calculation of performance metrics: ROC Curve and AUC value
+# Prediction Instance for the target variable
+lol_rf_pred1 <- predict(lol_RF,type = "prob")
+lol_rf_perf <- prediction(lol_rf_pred1[,2], lol_RF_train$blueWins)
+lol_rf_perf
+
+# Performance Instance with true positive rates and false positive rates
+pred3 <- performance(lol_rf_perf, "tpr","fpr")
+
+# ROC
+plot(pred3, colorize = TRUE, 
+     print.cutoffs.at = seq(0.1, by = 0.1), 
+     main = "Random Forest - ROC Curve")
+abline(a = 0, b = 1)
+
+# AUC value
+lol_rf_perf2 <- performance(lol_rf_perf, measure = "auc")
+RF_auc <- lol_rf_perf2@y.values[[1]]
+RF_auc
+RF_auc <- round(RF_auc, 4)
+legend(.6, .4, RF_auc, title = "AUC", cex = 1)
+```
+
+
+```{r}
+my.statistics <- function(Actual,Predicted) {
+  confusion.table <- table(lol_RF_train$blueWins,lol_RF_pred)
+  output <- list(confusion.table=confusion.table)
+  TN <- confusion.table[1]
+  FN <- confusion.table[2]
+  FP <- confusion.table[3]
+  TP <- confusion.table[4]
+  output$accuracy <- (TP+TN)/sum(confusion.table)
+  output$precision <- (TP)/(TP+FP)
+  output$sensitivity <- (TP)/(TP+FN)
+  output$specificity <- (TN)/(TN+FP)
+  output$FPR <- (FP)/(TN+FP)
+  output$TPR <- (TP)/(TP+FN)
+  output$F1Score <- 2 * (output$precision * output$sensitivity) / (output$precision + output$sensitivity)
+  
+  return(output)
+}
+my.statistics(Actual = lol_RF_train$blueWins, Predicted = lol_RF_pred)
+
+```
+
+```{r}
+# Overall Accuracy Results for Supervised Models:
+# LR 0.725 (72%)
+# kNN 0.958 (95%)
+# DT 0.708 (70%)
+# RF 0.728 (72%) 
+```
+
